@@ -8,6 +8,11 @@ After running `./build.sh setup` (or `./build.sh all`), the WorkSpaces client
 appears in the Fedora application menu as **Amazon WorkSpaces (on
 aws-workspace)**. Click it to launch.
 
+The entry runs `build.sh launch %u` from this repo, so it uses the same
+minimal environment as the command line (below). It's also registered as the
+handler for `workspaces://` links. If you move the repo, re-run
+`./build.sh setup` to update the path.
+
 If the icon doesn't appear, log out and back in to refresh the desktop file
 cache.
 
@@ -23,9 +28,6 @@ container as `podman exec --env=...` arguments, which are visible in `ps` to
 all local users. `build.sh` uses `env -i` to pass only the display, D-Bus,
 locale, and session variables listed in `CLEAN_ENV_VARS`, so secrets exported
 from `~/.bashrc` (cloud keys, API tokens) don't reach the container.
-
-The app menu entry does **not** use this wrapper yet (it calls
-`distrobox-enter` directly). Prefer `./build.sh launch` until that's fixed.
 
 Any arguments are passed to the client, e.g. a `workspaces://` URI:
 
@@ -70,8 +72,11 @@ Don't `apt-get upgrade` inside the container; see
 ## Removing the Desktop Shortcut
 
 ```bash
-distrobox enter aws-workspace -- distrobox-export --app workspacesclient --delete
+rm ~/.local/share/applications/aws-workspace-com.amazon.workspacesclient.desktop
 ```
+
+(`distrobox-export --delete` won't find it, because its Exec line no longer
+calls `distrobox-enter`.) `./build.sh setup` recreates it.
 
 ## Removing Everything
 
@@ -79,10 +84,6 @@ distrobox enter aws-workspace -- distrobox-export --app workspacesclient --delet
 ./build.sh remove
 podman rmi quay.io/danclark/aws-workspace:latest
 ```
-
-Distrobox also exports an `aws-workspace.desktop` entry (a shell into the
-container). `./build.sh remove` deletes the container; remove that entry with
-`rm ~/.local/share/applications/aws-workspace.desktop` if it remains.
 
 ## Troubleshooting
 

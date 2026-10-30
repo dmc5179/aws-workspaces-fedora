@@ -99,15 +99,12 @@ Client logs include the registration code; don't paste them publicly.
 2. Distrobox shares `$HOME`, so client config/logs land in the host home dir
    (likely `~/.local/share/Amazon Web Services/`). Survives rebuilds — good
    for registration, but stale config can survive too.
-3. `distrobox create` also exports `aws-workspace.desktop` (a shell into the
-   container); unclear whether `distrobox rm` removes it.
+3. ~~`aws-workspace.desktop` terminal entry~~ Resolved: `--no-entry`.
 4. Multi-monitor support unverified with this setup.
-5. **`distrobox enter` copies the whole host shell environment into the
-   container as `--env=NAME=value` arguments to `podman exec`.** Fixed for
-   `./build.sh launch` (`with_clean_env`); still open for the app menu. Any secrets
-   exported in the shell (cloud keys, API tokens) are passed to the client and
-   are visible in `ps` to every local user while it runs. Launching from a
-   terminal with secrets in the environment is the worst case.
+5. **`distrobox enter` copies the caller's whole environment into the
+   container as `--env=NAME=value` arguments to `podman exec`** (visible in
+   `ps`). Mitigated: every `distrobox` call in `build.sh` goes through
+   `with_clean_env`, and the app menu entry runs `build.sh launch`.
 6. ~~Video decode is software~~ Fixed: `va-driver-all` restores VA-API
    hardware decode (verified 2026-10-30).
 
@@ -136,14 +133,21 @@ Client logs include the registration code; don't paste them publicly.
       children inherit exported vars. Verified with a live session: 23
       `--env=` args, no secret names on the `podman exec` command line or in
       the `workspacesclient`/`dcvviewer` process env; login, streaming OK.
-- [ ] **App menu entry still leaks env vars.** The GNOME session env has the
-      same secrets (exported in `~/.bashrc`; verified by var name only), and
-      the `distrobox-export` `.desktop` calls `distrobox-enter` directly.
-      Plan: have `setup` write its own `.desktop` with
-      Exec=`<repo>/build.sh launch %u` (or an installed launcher in
-      `~/.local/bin`), keep `MimeType=x-scheme-handler/workspaces`, and stop
-      exporting via `distrobox-export` (update `remove` to match). Verify with
-      the same `ps`/`/proc/<pid>/environ` name-only check.
+- [x] **App menu entry env leak** (fixed + verified 2026-10-30: launched from
+      GNOME app menu, parent gnome-shell; 23 `--env=` args, no secret names on
+      `podman exec` cmdline or in client/viewer env).
+      `export_app` runs `distrobox-export`, then rewrites the entry's `Exec=`
+      to `"<repo>/build.sh" launch %u` (keeps
+      `MimeType=x-scheme-handler/workspaces`, still the default handler).
+      `distrobox create --no-entry` stops the leaky "terminal into container"
+      entry; `setup` deletes it if present. All `distrobox` calls in
+      `build.sh` go through `with_clean_env`. `distrobox-export --delete`
+      can't find the rewritten entry (it matches `Exec=.*distrobox.*enter`),
+      so `remove` deletes `${DESKTOP_FILE}` explicitly. Moving the repo
+      breaks the entry until `setup` is re-run. `remove` path not yet
+      exercised.
+      To verify: launch from the app menu, then check `podman exec`
+      cmdline and client `/proc/<pid>/environ` for secret var names only.
 - [ ] Audio under the clean env: not checked (low priority per user).
       Keyboard/mouse input confirmed working 2026-10-30. Add allowlist vars
       (e.g. `PULSE_SERVER`) only if audio turns out broken.

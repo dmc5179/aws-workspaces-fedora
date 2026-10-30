@@ -95,13 +95,19 @@ export the desktop shortcut:
 
 This does two things:
 
-1. **`distrobox create`** — Registers a container named `aws-workspace` backed
-   by the image you just built. If the container already exists, this step is
-   skipped.
+1. **`distrobox create --no-entry`** — Registers a container named
+   `aws-workspace` backed by the image you just built. If the container
+   already exists, this step is skipped. `--no-entry` skips Distrobox's
+   "terminal into the container" app menu entry.
 
 2. **`distrobox-export --app`** — Copies a `.desktop` file to
    `~/.local/share/applications/` on the Fedora host so the WorkSpaces client
    appears in the app menu as **Amazon WorkSpaces (on aws-workspace)**.
+   `build.sh` then rewrites its `Exec=` line to `build.sh launch %u`, because
+   the exported entry calls `distrobox-enter` directly, which would pass the
+   desktop session's whole environment (including any secrets exported from
+   `~/.bashrc`) into the container. See
+   [launch.md](launch.md#from-the-command-line).
 
 On the first start, Distrobox still sets up your user, home directory, and
 host integration inside the container (a few seconds), but installs no

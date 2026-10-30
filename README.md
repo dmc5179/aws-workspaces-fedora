@@ -24,7 +24,10 @@ this image locally (or it can be pulled from a registry).
 **Runtime** — Distrobox creates a container from the image and shares the
 host's display server, audio (PulseAudio/PipeWire), network stack, and home
 directory. `distrobox-export --app` writes a `.desktop` file so the client
-appears in the Fedora app menu and launches like any other application.
+appears in the Fedora app menu and launches like any other application. Every
+launch goes through `build.sh launch`, which passes only the display, D-Bus,
+and session variables the client needs, so secrets in your shell environment
+don't leak into the container.
 
 ## Prerequisites
 

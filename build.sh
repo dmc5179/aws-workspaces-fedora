@@ -4,6 +4,8 @@ set -euo pipefail
 IMAGE_NAME="quay.io/danclark/aws-workspace:latest"
 CONTAINER_NAME="aws-workspace"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APPS_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/applications"
+DESKTOP_FILE="${APPS_DIR}/${CONTAINER_NAME}-com.amazon.workspacesclient.desktop"
 
 container_exists() {
     podman container exists "${CONTAINER_NAME}"
@@ -23,13 +25,24 @@ create_container() {
     fi
 
     echo "Creating distrobox container from pre-built image..."
-    distrobox create --yes --name "${CONTAINER_NAME}" --image "${IMAGE_NAME}"
+    # --no-entry: skip the "terminal into the container" app menu entry, which
+    # would call distrobox enter with the full session environment.
+    with_clean_env distrobox create --yes --no-entry --name "${CONTAINER_NAME}" --image "${IMAGE_NAME}"
     echo "Container created: ${CONTAINER_NAME}"
 }
 
 export_app() {
     echo "Exporting WorkSpaces app to host desktop..."
-    distrobox enter "${CONTAINER_NAME}" -- distrobox-export --app workspacesclient
+    with_clean_env distrobox enter "${CONTAINER_NAME}" -- distrobox-export --app workspacesclient
+
+    # distrobox-export's Exec line calls distrobox-enter directly, which passes
+    # the desktop session's environment (including secrets) into the
+    # container. Route the menu entry and workspaces:// links through launch.
+    sed -i "s|^Exec=.*|Exec=\"${SCRIPT_DIR}/build.sh\" launch %u|" "${DESKTOP_FILE}"
+    update-desktop-database "${APPS_DIR}" 2>/dev/null || true
+
+    # Remove the terminal entry created by older versions of this script.
+    rm -f "${APPS_DIR}/${CONTAINER_NAME}.desktop"
     echo "Done. 'Amazon WorkSpaces' should appear in your application menu."
     echo "If it doesn't, log out and back in to refresh the desktop cache."
 }
@@ -41,8 +54,12 @@ remove_container() {
     fi
 
     echo "Removing exported app and distrobox container..."
-    distrobox enter "${CONTAINER_NAME}" -- distrobox-export --app workspacesclient --delete || true
-    distrobox rm --force "${CONTAINER_NAME}"
+    with_clean_env distrobox enter "${CONTAINER_NAME}" -- distrobox-export --app workspacesclient --delete || true
+    # distrobox-export --delete only finds entries whose Exec calls
+    # distrobox-enter, so remove our rewritten entry explicitly.
+    rm -f "${DESKTOP_FILE}" "${APPS_DIR}/${CONTAINER_NAME}.desktop"
+    update-desktop-database "${APPS_DIR}" 2>/dev/null || true
+    with_clean_env distrobox rm --force "${CONTAINER_NAME}"
 }
 
 prune_images() {
