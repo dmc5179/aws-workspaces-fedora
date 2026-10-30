@@ -116,7 +116,8 @@ Client logs include the registration code; don't paste them publicly.
       image (2026-10-30: working; see **State**).
 - [ ] Capture the original failure symptoms if they recur, plus client logs.
 - [ ] Bake in WebKit env workarounds only if login rendering fails.
-- [ ] Verify multi-monitor, smart card, and the app-menu launcher.
+- [ ] Verify multi-monitor and the app-menu launcher. (Smart card
+      passthrough confirmed working by user, 2026-10-30.)
 - [ ] Decide whether to push the image to quay.io for other machines.
 - [ ] Revisit plain `podman run --rm` launcher if Distrobox-specific issues
       show up.
