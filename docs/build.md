@@ -2,9 +2,14 @@
 
 ## Overview
 
-The build creates an Ubuntu 22.04 container image with the official Amazon
-WorkSpaces client and all required GUI libraries pre-installed. Podman runs
-rootless — no `sudo` needed for the build itself.
+The build creates an Ubuntu 24.04 container image with the official Amazon
+WorkSpaces client pre-installed. Podman runs rootless — no `sudo` needed for
+the build itself.
+
+The image is meant to be **static**: the client and every package the
+container needs are installed at build time. To update the client, rebuild
+the image and recreate the container (`./build.sh rebuild`) rather than
+upgrading packages inside the running container.
 
 ## Prerequisites
 
@@ -23,54 +28,49 @@ sudo dnf install -y podman distrobox
 This runs:
 
 ```bash
-podman build --squash -t quay.io/danclark/aws-workspace:latest -f Containerfile .
+podman build --pull=newer --squash -t quay.io/danclark/aws-workspace:latest -f Containerfile .
 ```
 
-The `--squash` flag collapses the image layers to reduce size.
+`--pull=newer` refreshes the `ubuntu:24.04` base image when a newer one is
+published. `--squash` collapses the image layers to reduce size.
 
 ## What the Containerfile Does
 
-The build runs in two stages:
+It's a single-stage build with three steps:
 
-### Stage 1: GUI Dependencies
+### 1. Distrobox and GPU packages
 
-Installs the libraries the WorkSpaces client needs to render its UI and
-interact with display, audio, and notification systems:
+Installs the packages `distrobox-init` would otherwise install the first time
+you run `distrobox enter` (shell tools, `sudo`, `passwd`, locales, etc. — see
+`setup_apt` in `/usr/bin/distrobox-init`), plus Mesa OpenGL, Vulkan, and
+VA-API drivers for GPU rendering and hardware video decode. It also generates
+the `en_US.UTF-8` locale.
 
-| Package                    | Purpose                        |
-|----------------------------|--------------------------------|
-| `libcanberra-gtk-module`   | GTK event sounds               |
-| `libcanberra-gtk3-module`  | GTK3 event sounds              |
-| `packagekit-gtk3-module`   | GTK3 PackageKit integration    |
-| `libsoup2.4-1`             | HTTP client library            |
-| `libwebkit2gtk-4.0-37`     | Embedded web views             |
-| `libgtk-3-0`               | GTK3 toolkit                   |
-| `libnotify4`               | Desktop notifications          |
-| `libnss3`                  | Network security services      |
-| `libxss1`                  | X11 screensaver extension      |
-| `libasound2`               | ALSA audio                     |
-| `libgbm1`                  | Mesa GBM (GPU buffer mgmt)     |
-| `libpulse0`                | PulseAudio client              |
-| `dbus-x11`                 | D-Bus / X11 integration        |
-| `xdg-utils`                | Desktop utility commands        |
+### 2. AWS WorkSpaces client
 
-### Stage 2: AWS WorkSpaces Client
-
-1. Downloads the AWS public GPG key from:
+1. Downloads the AWS public GPG key from
    `https://workspaces-client-linux-public-key.s3-us-west-2.amazonaws.com/ADB332E7.asc`
+2. Adds the official Amazon APT repository for Ubuntu 24.04:
+   `deb https://d3nt0h4h6pmmc4.cloudfront.net/ubuntu noble main`
+3. Installs the `workspacesclient` package. The package declares its own
+   runtime dependencies (WebKitGTK 4.1, libsoup 3, GStreamer, smart card
+   support, etc.), so they are pulled in automatically.
 
-2. Adds the official Amazon APT repository:
-   `deb https://d3nt0h4h6pmmc4.cloudfront.net/ubuntu jammy main`
+See AWS's install instructions:
+<https://clients.amazonworkspaces.com/linux-install>
 
-3. Installs the `workspacesclient` package.
+### 3. Distrobox setup marker
 
-Both stages clean up the APT cache (`rm -rf /var/lib/apt/lists/*`) to keep
-the image smaller.
+Creates `/.containersetupdone`. When `distrobox-init` sees this file it skips
+its package installation step, so the container starts quickly and its
+contents match the image exactly.
+
+Each step cleans up the APT cache (`rm -rf /var/lib/apt/lists/*`) to keep the
+image smaller.
 
 ## Image Size
 
-The final image is roughly 2-3 GB. Most of this is Ubuntu's base layer plus
-the GTK/WebKit dependencies the client requires.
+The final image is roughly 1.4 GB, mostly Ubuntu's GTK/WebKit/GStreamer stack.
 
 ## First-Time Setup
 
@@ -84,17 +84,16 @@ export the desktop shortcut:
 This does two things:
 
 1. **`distrobox create`** — Registers a container named `aws-workspace` backed
-   by the image you just built. This is metadata only; nothing is installed on
-   the host.
+   by the image you just built. If the container already exists, this step is
+   skipped.
 
 2. **`distrobox-export --app`** — Copies a `.desktop` file to
    `~/.local/share/applications/` on the Fedora host so the WorkSpaces client
-   appears in the app menu.
+   appears in the app menu as **Amazon WorkSpaces (on aws-workspace)**.
 
-On the first `distrobox enter`, Distrobox installs its own integration
-packages inside the container (display forwarding, host font access, etc.).
-This is a one-time operation that takes a minute or so and only modifies the
-container, not the host.
+On the first start, Distrobox still sets up your user, home directory, and
+host integration inside the container (a few seconds), but installs no
+packages.
 
 ## Combined Command
 
@@ -104,22 +103,28 @@ To build and set up in one step:
 ./build.sh all
 ```
 
-## Rebuilding
+## Updating the Client
 
-To update the client (e.g., when AWS publishes a new version), rebuild the
-image and recreate the container:
+When AWS publishes a new client version:
 
 ```bash
-./build.sh build
-distrobox rm aws-workspace
-./build.sh setup
+./build.sh rebuild
 ```
 
-Or update in place without rebuilding:
+This builds a new image, removes the old container and its app-menu entry,
+prunes the old untagged image, then recreates the container and re-exports
+the app. Your WorkSpaces registration and settings live in your home
+directory, so they survive the rebuild.
+
+Don't run `apt-get upgrade` inside the container: those changes are lost on
+the next rebuild and make the container drift from the image.
+
+To check which client version is in the repo vs. installed:
 
 ```bash
-distrobox enter aws-workspace -- sudo apt-get update
-distrobox enter aws-workspace -- sudo apt-get upgrade -y
+curl -sL https://d3nt0h4h6pmmc4.cloudfront.net/ubuntu/dists/noble/main/binary-amd64/Packages \
+  | grep -A1 '^Package: workspacesclient' | grep Version
+distrobox enter aws-workspace -- dpkg-query -W workspacesclient
 ```
 
 ## Pushing to a Registry
@@ -143,12 +148,9 @@ Distrobox will pull the image from the registry automatically.
 **Build fails downloading the GPG key** — Check network connectivity and
 verify the key URL hasn't changed. The key ID is `ADB332E7`.
 
-**Image is too large** — The `--squash` flag is already applied. The bulk of
-the size comes from Ubuntu's GTK/WebKit stack, which is required by the
-client.
+**Build fails with "Unable to locate package"** — A package was renamed in
+Ubuntu. Check the name with `podman run --rm ubuntu:24.04 sh -c 'apt-get update -qq && apt-cache search <name>'`.
 
-**`distrobox create` says the container already exists** — Remove it first:
-
-```bash
-distrobox rm aws-workspace
-```
+**`distrobox create` says the container already exists** — Use
+`./build.sh rebuild` to recreate it from the current image, or
+`./build.sh remove` to delete it.
