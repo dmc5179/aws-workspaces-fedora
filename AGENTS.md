@@ -59,7 +59,7 @@ _Last updated: 2026-10-30_
 
 - Host: Fedora 44, kernel 7.2, Wayland session (XWayland `:0`), podman
   5.8.9, distrobox 1.8.2.5. GPU exposed at `/dev/dri/card1`, `renderD128`.
-- Image built on this host: Ubuntu 24.04, `workspacesclient`
+- Image built on this host (with va-driver-all): Ubuntu 24.04, `workspacesclient`
   2026.0.5677-1, 1.36 GB.
 - `aws-workspace` container created; first start took ~4 s with no
   `apt-get` runs (verified in `podman logs`). App exported as
@@ -67,8 +67,8 @@ _Last updated: 2026-10-30_
 - **2026-10-30 login test: working.** Registration, login, and streaming OK
   via `./build.sh launch`. Viewer log: GPU rendering via EGL on
   `Mesa Intel(R) Graphics (ARL)`, Mesa 25.2.8 (24.04); QUIC/UDP transport,
-  RTT ~25-50 ms; only one benign WARN. H.264 decode is **software**
-  (`ffmpeg-decoder - Initialized software context`).
+  RTT ~25-50 ms; only one benign WARN. H.264 decode was software in
+  that first run; hardware (VA-API) since adding `va-driver-all` (see TODO).
 - Older logs (2026-09-30 to 10-02, 22.04 image, Intel UHD CML GPU, Mesa 23.2)
   show no clear failure cause: session ends are `origin: Local` closes;
   recurring `certificate-store - Could not save the certificate store: No such
@@ -107,9 +107,8 @@ Client logs include the registration code; don't paste them publicly.
    exported in the shell (cloud keys, API tokens) are passed to the client and
    are visible in `ps` to every local user while it runs. Launching from a
    terminal with secrets in the environment is the worst case.
-6. Video decode is software; `mesa-va-drivers` doesn't cover Intel. Intel
-   VA-API needs `intel-media-va-driver` (iHD). Unknown whether DCV's viewer
-   would use VA-API at all.
+6. ~~Video decode is software~~ Fixed: `va-driver-all` restores VA-API
+   hardware decode (verified 2026-10-30).
 
 ## TODO
 
@@ -143,17 +142,18 @@ Client logs include the registration code; don't paste them publicly.
 - Side note for the user (their call): moving secrets out of `~/.bashrc`
   (e.g. `~/.aws/credentials`, a secret manager) limits exposure for every
   app, not just this one.
-- [ ] **Test Intel hardware video decode.** Today H.264 decode is software
-      (`viewer.log`: `ffmpeg-decoder - Initialized software context`).
-      `mesa-va-drivers` covers AMD/nouveau, not Intel; this host is Intel Arc
-      (Arrow Lake), which needs the iHD driver.
-      Steps: add `intel-media-va-driver` (universe; or `-non-free` from
-      multiverse for full encode/decode) and `vainfo` to the Containerfile,
-      `./build.sh rebuild`, run `distrobox enter aws-workspace -- vainfo`
-      (expect `iHD` driver + H264 decode profiles), connect, then check
-      `viewer.log` for the decoder line and compare CPU usage. If DCV still
-      uses software decode, revert (no point carrying the package). Keep the
-      package list GPU-neutral or document that it's Intel-specific.
+- [x] **Intel hardware video decode** (2026-10-30). Containerfile installs
+      `va-driver-all` (iHD 24.1.0 + i965 + Mesa; GPU-neutral) + `vainfo`.
+      DCV's viewer bundles its own FFmpeg and uses VA-API automatically when
+      a driver is present (it also has `enable/disable-hardware-decoder` and
+      `enable/disable-vaapi` options). Before: `source: Ffmpeg` +
+      `ffmpeg-decoder - Initialized software context`. After rebuild:
+      `media - Selected context: vaapi`, h264 decompressor `source: VA`, no
+      decoder errors. The old 22.04 setup also used VA-API, so the first 24.04
+      image was a regression. CPU while opening/closing Firefox: 0.5-3%
+      (software) vs 1-1.5% (hardware); light desktop use barely differs,
+      benefit is for video/heavy motion and battery. Check with
+      `grep -E "Selected context|decompressor for h264" .../WSP/viewer.log`.
 - [ ] Pass username + registration code on the CLI. The client natively
       accepts `workspacesclient 'workspaces://username@registration-code?MFACode=mfa-code'`
       (from `workspacesclient --help`; username and MFACode optional; no

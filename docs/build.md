@@ -42,9 +42,21 @@ It's a single-stage build with three steps:
 
 Installs the packages `distrobox-init` would otherwise install the first time
 you run `distrobox enter` (shell tools, `sudo`, `passwd`, locales, etc. — see
-`setup_apt` in `/usr/bin/distrobox-init`), plus Mesa OpenGL, Vulkan, and
-VA-API drivers for GPU rendering and hardware video decode. It also generates
-the `en_US.UTF-8` locale.
+`setup_apt` in `/usr/bin/distrobox-init`), plus Mesa OpenGL and Vulkan for GPU
+rendering. `va-driver-all` installs every VA-API driver (Intel iHD and i965,
+Mesa for AMD) so the DCV viewer can decode the H.264 stream on the GPU; it
+picks VA-API automatically when a driver works. `vainfo` is included for
+troubleshooting. It also generates the `en_US.UTF-8` locale.
+
+To confirm hardware decode is in use, check the streaming log after
+connecting:
+
+```bash
+grep -E 'Selected context|decompressor for h264' \
+  ~/.local/share/Amazon\ Web\ Services/Amazon\ WorkSpaces/logs/WSP/viewer.log
+```
+
+`source: VA` means hardware decode; `source: Ffmpeg` means software.
 
 ### 2. AWS WorkSpaces client
 

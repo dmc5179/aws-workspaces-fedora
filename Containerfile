@@ -3,7 +3,8 @@ FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Packages distrobox-init would otherwise install on first `distrobox enter`
-# (see setup_apt in /usr/bin/distrobox-init), plus Mesa GPU/VA-API drivers.
+# (see setup_apt in /usr/bin/distrobox-init), plus Mesa GPU drivers and all
+# VA-API video decode drivers (Intel iHD + i965, Mesa for AMD).
 # Installing them here and creating /.containersetupdone (below) makes
 # distrobox skip its runtime package setup, so the container matches the image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -57,7 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
     libvulkan1 \
     mesa-vulkan-drivers \
-    mesa-va-drivers \
+    va-driver-all \
+    vainfo \
     && sed -i 's/^# *en_US.UTF-8/en_US.UTF-8/' /etc/locale.gen \
     && locale-gen \
     && rm -rf /var/lib/apt/lists/*
