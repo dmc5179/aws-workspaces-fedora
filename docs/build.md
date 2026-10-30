@@ -141,11 +141,22 @@ distrobox enter aws-workspace -- dpkg-query -W workspacesclient
 
 ## Pushing to a Registry
 
-If you want to share the image across machines:
+To share a tested image across machines:
 
 ```bash
-podman push quay.io/danclark/aws-workspace:latest
+podman login quay.io
+./build.sh push
 ```
+
+This tags the local image with the installed client version (e.g.
+`quay.io/danclark/aws-workspace:2026.0.5677`, read from the image with
+`dpkg-query`) and pushes both that tag and `latest`. The version tag is a
+rollback point if a later AWS client release has problems.
+
+The image contains Amazon's WorkSpaces client; keep the registry repository
+private unless you've confirmed AWS's license allows redistribution. The
+image holds no personal data — registration, settings, and logs live in your
+home directory.
 
 On another machine, skip the build and go straight to setup:
 
@@ -153,7 +164,14 @@ On another machine, skip the build and go straight to setup:
 ./build.sh setup
 ```
 
-Distrobox will pull the image from the registry automatically.
+Distrobox will pull `latest` from the registry automatically. To roll back to
+a specific client version, pull and retag it, then recreate the container:
+
+```bash
+podman pull quay.io/danclark/aws-workspace:2026.0.5677
+podman tag quay.io/danclark/aws-workspace:2026.0.5677 quay.io/danclark/aws-workspace:latest
+./build.sh remove && ./build.sh setup
+```
 
 ## Troubleshooting
 

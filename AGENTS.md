@@ -18,8 +18,9 @@ by AWS only as an Ubuntu `.deb`) on Fedora.
   `touch /.containersetupdone` so distrobox-init skips its runtime package
   install.
 - `build.sh` — `build`, `setup` (idempotent `distrobox create` +
-  `distrobox-export --app`), `launch`, `all`, `rebuild` (build + remove +
-  prune + create + export), `remove`.
+  `distrobox-export --app`), `launch` (clean env, forwards args), `all`,
+  `rebuild` (build + remove + prune + create + export), `remove`, `push`
+  (tags with client version from `dpkg-query`, pushes it + `latest`).
 - Image tag: `quay.io/danclark/aws-workspace:latest`. Container name:
   `aws-workspace`.
 - Docs: `README.md`, `docs/build.md`, `docs/launch.md`.
@@ -118,7 +119,13 @@ Client logs include the registration code; don't paste them publicly.
 - [ ] Bake in WebKit env workarounds only if login rendering fails.
 - [ ] Verify multi-monitor and the app-menu launcher. (Smart card
       passthrough confirmed working by user, 2026-10-30.)
-- [ ] Decide whether to push the image to quay.io for other machines.
+- [x] Push the image to quay.io (2026-10-30, by user):
+      `quay.io/danclark/aws-workspace:latest` and `:2026.0.5677`, both the
+      tested image (created 2026-10-30 19:55 UTC, va-driver-all). Future
+      pushes: `./build.sh push`. Keep the repo private (AWS client
+      redistribution terms unverified). Note: podman's quay.io login on this
+      host was an OpenShift robot account before the user's push; run
+      `podman login quay.io` as `danclark` before pushing.
 - [ ] Revisit plain `podman run --rm` launcher if Distrobox-specific issues
       show up.
 - [x] **Stop leaking host env vars from `./build.sh launch`** (2026-10-30).

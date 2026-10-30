@@ -50,6 +50,24 @@ prune_images() {
     podman image prune -f >/dev/null
 }
 
+# Client version in the local image without the Debian revision,
+# e.g. 2026.0.5677-1 -> 2026.0.5677.
+client_version() {
+    local version
+    version="$(podman run --rm --pull=never --network=none --entrypoint dpkg-query \
+        "${IMAGE_NAME}" -W -f='${Version}' workspacesclient)"
+    echo "${version%-*}"
+}
+
+push_image() {
+    local versioned
+    versioned="${IMAGE_NAME%:*}:$(client_version)"
+    echo "Pushing ${versioned} and ${IMAGE_NAME}..."
+    podman tag "${IMAGE_NAME}" "${versioned}"
+    podman push "${versioned}"
+    podman push "${IMAGE_NAME}"
+}
+
 # Variables the client needs from the host session. Everything else is dropped,
 # because distrobox-enter copies the caller's whole environment into the
 # container as `podman exec --env=...` arguments (visible in `ps`), which
@@ -87,6 +105,8 @@ Commands:
   all       Run build + setup (first-time install)
   rebuild   Rebuild the image and recreate the container (use to update the client)
   remove    Remove the exported app and the distrobox container
+  push      Push the local image to the registry, tagged with the client
+            version and as latest (run 'podman login quay.io' first)
 
 Prerequisites:
   sudo dnf install -y podman distrobox
@@ -122,6 +142,9 @@ case "${1:-}" in
         ;;
     remove)
         remove_container
+        ;;
+    push)
+        push_image
         ;;
     *)
         usage
