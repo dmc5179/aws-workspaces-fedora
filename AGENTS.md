@@ -75,7 +75,8 @@ _Last updated: 2026-10-30_
   recurring `certificate-store - Could not save the certificate store: No such
   file or directory` (not seen in the 24.04 run); a broker health-check
   `[ERROR]` appears in every run including the working one (benign).
-- Original "doesn't always work well" symptoms not yet captured.
+- Original "doesn't always work well" symptoms: dropped (2026-10-30). User
+  suspects a bad network connection; no details available.
 
 ## Logs
 
@@ -112,10 +113,13 @@ Client logs include the registration code; don't paste them publicly.
 
 - [x] User: test registration + login + connect to a WorkSpace with the 24.04
       image (2026-10-30: working; see **State**).
-- [ ] Capture the original failure symptoms if they recur, plus client logs.
 - [ ] Bake in WebKit env workarounds only if login rendering fails.
-- [ ] Verify multi-monitor and the app-menu launcher. (Smart card
-      passthrough confirmed working by user, 2026-10-30.)
+- [ ] Verify multi-monitor. (App menu launcher and smart card passthrough
+      confirmed working by user, 2026-10-30.)
+- [x] Exercise `./build.sh rebuild` (which runs `remove`) with the new
+      desktop-entry handling (user ran it 2026-10-30): container recreated
+      from the new image, entry `Exec=` rewritten to `build.sh launch %u`, no
+      terminal entry, still the `workspaces://` handler.
 - [x] Push the image to quay.io (2026-10-30, by user):
       `quay.io/danclark/aws-workspace:latest` and `:2026.0.5677`, both the
       tested image (created 2026-10-30 19:55 UTC, va-driver-all). Future
@@ -144,8 +148,7 @@ Client logs include the registration code; don't paste them publicly.
       `build.sh` go through `with_clean_env`. `distrobox-export --delete`
       can't find the rewritten entry (it matches `Exec=.*distrobox.*enter`),
       so `remove` deletes `${DESKTOP_FILE}` explicitly. Moving the repo
-      breaks the entry until `setup` is re-run. `remove` path not yet
-      exercised.
+      breaks the entry until `setup` is re-run.
       To verify: launch from the app menu, then check `podman exec`
       cmdline and client `/proc/<pid>/environ` for secret var names only.
 - [ ] Audio under the clean env: not checked (low priority per user).
@@ -166,11 +169,12 @@ Client logs include the registration code; don't paste them publicly.
       (software) vs 1-1.5% (hardware); light desktop use barely differs,
       benefit is for video/heavy motion and battery. Check with
       `grep -E "Selected context|decompressor for h264" .../WSP/viewer.log`.
-- [ ] Pass username + registration code on the CLI. The client natively
-      accepts `workspacesclient 'workspaces://username@registration-code?MFACode=mfa-code'`
-      (from `workspacesclient --help`; username and MFACode optional; no
-      password field). The exported `.desktop` is already the
-      `x-scheme-handler/workspaces` default, so `xdg-open 'workspaces://...'`
-      also works. Untested. `./build.sh launch` now passes its arguments
-      through to `workspacesclient` (untested with a URI); remaining: optionally build the URI from
-      `./build.sh launch <username> <reg-code>`. Don't commit real codes.
+- [-] Pass username + registration code on the CLI (dropped 2026-10-30).
+      `./build.sh launch` forwards args to `workspacesclient`, which accepts
+      `workspaces://username@registration-code?MFACode=...`. Tested:
+      `workspaces://user@` (no code) → client logs `Ignoring invalid URI`;
+      `workspaces://user@<code with + as %2B>` → accepted (no invalid-URI
+      line) but the sign-in page still asks for username + password. This
+      directory uses `LoginType: UNIFIED_LOGIN` (AWS-hosted sign-in at
+      `*.signin.aws`), which ignores the client-supplied username. Not worth
+      pursuing; client remembers the registration code anyway.
